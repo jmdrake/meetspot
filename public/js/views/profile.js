@@ -44,6 +44,7 @@ export async function profile(el, ctx) {
       </form>
       ${setup ? '' : html`
         <a class="btn ghost block" href="/invite">${icon('link', 18)} Invite friends</a>
+        <a class="btn ghost block" href="/agreements">${icon('shield', 18)} What you agreed to</a>
         <button class="btn ghost block" id="signout">Sign out</button>`}
     </main>`);
 

@@ -15,7 +15,7 @@ An activity-first social app: people find a plan, go, and meet there. This is **
 - **Re-confirm** when the host changes the time, place or cost; guests can then drop out with no penalty.
 - **Check-in** by QR code, typed code, or the host tapping "Mark here". Confirmed guests not checked in 2 hours after the end become no-shows.
 - **Late cancellations** (within 48 hours) and no-shows are counted per member.
-- **Private homes:** the address is shown only to confirmed guests.
+- **Public places only** during testing. Home activities are switched off (`ALLOW_HOME_ACTIVITIES`) and come back later as friends-only.
 - **Mail** for invites, offers, requests, changes and cancellations; **group chat** per activity.
 
 Friends, Venues, Events, Moments and admin tools are the next milestones; their tabs show "coming soon".

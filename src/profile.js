@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { one, all } from './db.js';
 import { fail, age, ageRange, randomToken } from './util.js';
 import { requireUser } from './auth.js';
+import { agreementStatus, requireAgreement } from './consent.js';
 
 export const router = express.Router();
 export const UPLOAD_DIR = process.env.UPLOAD_DIR || path.resolve('uploads');
@@ -74,11 +75,12 @@ export function selfView(u) {
   };
 }
 
-router.get('/me', (req, res) => {
-  res.json({ user: req.user ? selfView(req.user) : null });
+router.get('/me', async (req, res) => {
+  if (!req.user) return res.json({ user: null });
+  res.json({ user: { ...selfView(req.user), agreements: await agreementStatus(req.user.id) } });
 });
 
-router.put('/me', requireUser, async (req, res) => {
+router.put('/me', requireUser, requireAgreement('member'), async (req, res) => {
   const b = req.body;
   const firstName = String(b.firstName || '').trim().slice(0, 40);
   if (!firstName) fail(400, 'First name is required');
@@ -102,7 +104,7 @@ const upload = multer({
   fileFilter: (_req, file, cb) => cb(null, /^image\/(jpeg|png|webp|heic|heif)$/.test(file.mimetype)),
 });
 
-router.post('/me/photo', requireUser, upload.single('photo'), async (req, res) => {
+router.post('/me/photo', requireUser, requireAgreement('member'), upload.single('photo'), async (req, res) => {
   if (!req.file) fail(400, 'Choose a JPG, PNG or WebP photo under 6 MB');
   const old = req.user.photo_path;
   const stored = await storePhoto(req.file);

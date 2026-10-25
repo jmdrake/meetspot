@@ -8,6 +8,7 @@ import { chat } from './views/chat.js';
 import { checkin } from './views/checkin.js';
 import { mail } from './views/mail.js';
 import { invite, comingSoon } from './views/misc.js';
+import { agreement, agreementsReview } from './views/agreement.js';
 
 const root = document.getElementById('app');
 const state = { me: null, config: null, unread: 0 };
@@ -16,11 +17,13 @@ const routes = [
   [/^\/join\/([A-Za-z0-9]+)$/, ([code]) => { localStorage.setItem('ms_invite', code.toUpperCase()); return go('/signin', true); }, { public: true }],
   [/^\/signin$/, () => signIn, { public: true, bare: true }],
   [/^\/auth\/callback$/, () => authCallback, { public: true, bare: true }],
+  [/^\/agreement\/(member|host)$/, () => agreement, { allowIncomplete: true, agreement: true, noNav: true }],
+  [/^\/agreements$/, () => agreementsReview, {}],
   [/^\/profile$/, () => profile, { allowIncomplete: true }],
   [/^\/(activities)?$/, () => activities, { tab: 'activities' }],
-  [/^\/new$/, () => activityForm, {}],
+  [/^\/new$/, () => activityForm, { host: true }],
   [/^\/a\/([\w-]+)$/, () => detail, {}],
-  [/^\/a\/([\w-]+)\/edit$/, () => activityForm, {}],
+  [/^\/a\/([\w-]+)\/edit$/, () => activityForm, { host: true }],
   [/^\/a\/([\w-]+)\/chat$/, () => chat, { noNav: true }],
   [/^\/a\/([\w-]+)\/checkin$/, () => checkin, {}],
   [/^\/mail$/, () => mail, { tab: 'mail' }],
@@ -72,7 +75,9 @@ async function route() {
     if (!m) continue;
     const params = m.slice(1);
     if (!opts.public && !state.me) return go('/signin', true);
+    if (!opts.public && !opts.agreement && !state.me.agreements?.member) return go('/agreement/member', true);
     if (!opts.public && !opts.allowIncomplete && state.me && !state.me.complete) return go('/profile', true);
+    if (opts.host && !state.me.agreements?.host) return go(`/agreement/host?next=${encodeURIComponent(path)}`, true);
     const view = await pick(params);
     if (typeof view !== 'function' || token !== renderToken) return;
     const tab = opts.tab || (path.match(/^\/(friends|venues|moments)$/)?.[1]);
@@ -94,6 +99,7 @@ async function route() {
       });
     } catch (e) {
       if (e.status === 401) { state.me = null; return go('/signin', true); }
+      if (e.code?.startsWith('agreement_')) { await loadMe(); return go(`/agreement/${e.code.slice(10)}?next=${encodeURIComponent(path)}`, true); }
       render(page, html`<main class="no-nav"><div class="empty"><p>${e.message}</p><a class="btn ghost" href="/activities">Back to Activities</a></div></main>`);
     }
     refreshUnread();

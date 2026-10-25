@@ -3,10 +3,12 @@ import QRCode from 'qrcode';
 import { q, one, all, tx } from './db.js';
 import { fail, age, anonLabel, ageRange, randomCode, HOUR } from './util.js';
 import { requireUser } from './auth.js';
+import { requireAgreement } from './consent.js';
 import { photoUrl, profileComplete, INTENTS } from './profile.js';
 
 export const router = express.Router();
 router.use(requireUser);
+router.use(requireAgreement('member'));
 
 const COST_TYPES = ['free', 'pay_own', 'dutch', 'host_covers', 'ticket'];
 const CANCEL_REASONS = ['event_canceled', 'cant_make_it', 'safety'];
@@ -307,6 +309,10 @@ function parseActivity(b, existing = {}) {
   else if (!(v.price_cents > 0)) fail(400, 'Set a ticket price');
   if (!['review', 'first_come'].includes(v.invite_style)) fail(400, 'Choose an invite style');
   if (!(v.age_min >= 18 && v.age_max >= v.age_min && v.age_max <= 99)) fail(400, 'Check the age range');
+  // Launch rule: public places only. Home activities return later, friends-only (see the Safety rules in the spec).
+  if (v.is_private_home && process.env.ALLOW_HOME_ACTIVITIES !== '1') {
+    fail(400, 'During testing, activities must be at a public place. Home activities come later, for friends only.');
+  }
   if (v.is_private_home && !v.neighborhood) fail(400, 'Add a neighborhood: a home address is shown only to confirmed guests');
   return v;
 }
@@ -316,7 +322,7 @@ const COLS = ['title', 'description', 'place_name', 'address', 'neighborhood', '
   'auto_fill', 'show_to_friends'];
 const MATERIAL = ['starts_at', 'ends_at', 'place_name', 'address', 'cost_type', 'price_cents'];
 
-router.post('/activities', async (req, res) => {
+router.post('/activities', requireAgreement('host'), async (req, res) => {
   requireComplete(req);
   const v = parseActivity(req.body);
   if (v.starts_at <= new Date()) fail(400, 'The start time must be in the future');
@@ -327,7 +333,7 @@ router.post('/activities', async (req, res) => {
   res.status(201).json({ activity: await activityView(a, req.user, { withPeople: true }) });
 });
 
-router.put('/activities/:id', async (req, res) => {
+router.put('/activities/:id', requireAgreement('host'), async (req, res) => {
   const updated = await tx(async (c) => {
     const a = await lockActivity(c, req.params.id);
     if (a.host_id !== req.user.id) fail(403, 'Only the host can edit this');

@@ -6,6 +6,7 @@ import { migrate } from './db.js';
 import { router as authRouter, loadUser } from './auth.js';
 import { router as profileRouter, UPLOAD_DIR } from './profile.js';
 import { router as activityRouter, runJobs } from './activities.js';
+import { router as consentRouter } from './consent.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -22,6 +23,7 @@ export function createApp() {
     devCodes: process.env.DEV_SHOW_CODES === '1',
   }));
   app.use('/api/auth', authRouter);
+  app.use('/api', consentRouter);
   app.use('/api', profileRouter);
   app.use('/api', activityRouter);
   app.use('/api', (_req, res) => res.status(404).json({ error: 'Not found' }));
@@ -35,7 +37,7 @@ export function createApp() {
     if (err.name === 'MulterError') err.status = 400;
     const status = err.status || err.statusCode || 500;
     if (status >= 500) console.error(err);
-    res.status(status).json({ error: status >= 500 ? 'Something went wrong. Try again.' : err.message });
+    res.status(status).json({ error: status >= 500 ? 'Something went wrong. Try again.' : err.message, ...(status < 500 && err.code ? { code: err.code } : {}) });
   });
   return app;
 }

@@ -22,9 +22,8 @@ export async function activityForm(el, ctx) {
       <form id="f" class="stack" style="gap:14px">
         <label class="field"><span>What’s the plan?</span><input name="title" required maxlength="80" value="${a?.title || ''}" placeholder="Trivia night, sunrise hike, extra concert ticket…"></label>
         <label class="field"><span>Details (optional)</span><textarea name="description" maxlength="1000" placeholder="What to expect, what to bring">${a?.description || ''}</textarea></label>
-        <label class="field"><span>Place</span><input name="placeName" required maxlength="120" value="${a?.placeName || ''}" placeholder="Venue or park name"></label>
-        <label class="toggle card" style="border-radius:12px"><span>It’s a private home<small>The address is shown only to confirmed guests</small></span>
-          <input type="checkbox" class="switch" name="isPrivateHome" ${a?.isPrivateHome ? 'checked' : ''}></label>
+        <label class="field"><span>Place</span><input name="placeName" required maxlength="120" value="${a?.placeName || ''}" placeholder="Restaurant, bar, park, theater…"></label>
+        <p class="hint" style="margin-top:-6px">${icon('shield', 14)} Public places only, such as a restaurant, bar, park, theater or café. No activities at homes.</p>
         <div class="grid2">
           <label class="field"><span>Address</span><input name="address" maxlength="200" value="${a?.address || ''}" placeholder="Street address"></label>
           <label class="field"><span>Neighborhood</span><input name="neighborhood" maxlength="80" value="${a?.neighborhood || ''}" placeholder="East Nashville"></label>
@@ -76,7 +75,7 @@ export async function activityForm(el, ctx) {
     e.preventDefault();
     const body = {
       title: E.title.value, description: E.description.value, placeName: E.placeName.value,
-      address: E.address.value, neighborhood: E.neighborhood.value, isPrivateHome: E.isPrivateHome.checked,
+      address: E.address.value, neighborhood: E.neighborhood.value, isPrivateHome: false,
       startsAt: new Date(E.startsAt.value).toISOString(), endsAt: new Date(E.endsAt.value).toISOString(),
       spots: Number(E.spots.value), costType: E.costType.value,
       priceCents: E.costType.value === 'ticket' ? Math.round(Number(E.price.value) * 100) : null,

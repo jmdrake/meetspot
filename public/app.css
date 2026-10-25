@@ -171,3 +171,17 @@ main.no-nav { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
 
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Agreements */
+.progress { height: 6px; border-radius: 3px; background: rgba(10,6,14,.45); overflow: hidden; }
+.progress span { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+.agree-card { gap: 12px; }
+.agree-title { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.3px; }
+.agree-rule { margin: 0; font-size: 17px; line-height: 1.45; }
+.agree-why { margin: 0; font-size: 14px; color: var(--ink-2); line-height: 1.45; }
+.terms { border-top: 1px solid var(--line); padding-top: 10px; }
+.terms summary { cursor: pointer; font-size: 13px; font-weight: 700; color: #FFB199; min-height: 32px; display: flex; align-items: center; }
+.terms p { font-size: 13px; color: var(--muted); line-height: 1.5; margin: 8px 0 0; }
+.terms.review { border-top: 0; border-bottom: 1px solid rgba(255,255,255,.06); padding: 12px 14px; }
+.terms.review summary { color: var(--ink); font-size: 14px; font-weight: 400; gap: 10px; }
+.check { border: 1px solid var(--line); margin: 0; }

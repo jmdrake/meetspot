@@ -49,6 +49,14 @@ function client() {
   };
 }
 
+async function agreeAll(c, kind) {
+  const a = await c.get(`/api/agreements/${kind}`);
+  for (const card of a.cards.filter((x) => x.pending)) {
+    const r = await c.post(`/api/agreements/${kind}/${card.id}`, { version: card.version, initials: 'TT', checkAnswer: card.check?.answer });
+    assert.equal(r.status, 200, r.error);
+  }
+}
+
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
 
 async function member(email, { gender = 'F', birth = '1993-05-01', intents = ['friends', 'romance'], invite = rootInvite, name } = {}) {
@@ -57,6 +65,8 @@ async function member(email, { gender = 'F', birth = '1993-05-01', intents = ['f
   assert.equal(s.status, 200, s.error);
   const v = await c.post('/api/auth/verify', { email, code: s.devCode });
   assert.equal(v.status, 200, v.error);
+  await agreeAll(c, 'member');
+  await agreeAll(c, 'host');
   const p = await c.put('/api/me', { firstName: name || email.split('@')[0], birthDate: birth, gender, intents });
   assert.equal(p.status, 200, p.error);
   const form = new FormData();
@@ -198,7 +208,15 @@ test('first-come joins instantly; check-in by code marks attendance', async () =
   assert.equal((await g.get(`/api/activities/${activity.id}`)).activity.me.status, 'attended');
 });
 
-test('private home address is shown only to confirmed guests', async () => {
+test('launch rule: no activities at private homes', async () => {
+  const host = await member('host4b@test.dev');
+  const r = await host.post('/api/activities', newActivity({ isPrivateHome: true, placeName: 'My place', neighborhood: 'Sylvan Park' }));
+  assert.equal(r.status, 400);
+  assert.match(r.error, /public place/);
+});
+
+test('private home address is shown only to confirmed guests (when homes are enabled)', async () => {
+  process.env.ALLOW_HOME_ACTIVITIES = '1';
   const host = await member('host4@test.dev');
   const g = await member('g4@test.dev');
   const { activity } = await host.post('/api/activities',
@@ -206,8 +224,9 @@ test('private home address is shown only to confirmed guests', async () => {
   const before = (await g.get('/api/activities?view=discover')).activities.find((x) => x.id === activity.id);
   assert.equal(before.address, null);
   assert.equal(before.placeName, 'Private home');
-  const after = (await g.post(`/api/activities/${activity.id}/request`)).activity;
-  assert.equal(after.address, '12 Elm St');
+  const joined = (await g.post(`/api/activities/${activity.id}/request`)).activity;
+  assert.equal(joined.address, '12 Elm St');
+  delete process.env.ALLOW_HOME_ACTIVITIES;
 });
 
 test('canceling: deleted if nobody confirmed, otherwise everyone is told', async () => {
@@ -268,4 +287,59 @@ test('Google/Apple sign-in via a Supabase token: invite needed for new people', 
   assert.equal((await c.get('/api/me')).user.email, 'oauth.person@gmail.com');
   assert.equal((await c.post('/api/auth/supabase', { access_token: 'garbage' })).status, 401);
   delete process.env.SUPABASE_URL;
+});
+
+test('agreements: initial every card before using MeetSpot; hosts initial the host cards', async () => {
+  const { AGREEMENTS } = await import('../src/agreements.js');
+  const c = client();
+  const s = await c.post('/api/auth/start', { email: 'newbie@test.dev', invite: rootInvite });
+  await c.post('/api/auth/verify', { email: 'newbie@test.dev', code: s.devCode });
+  assert.deepEqual((await c.get('/api/me')).user.agreements, { member: false, host: false });
+
+  const blocked = await c.put('/api/me', { firstName: 'Nia', birthDate: '1990-01-01', gender: 'F', intents: ['friends'] });
+  assert.equal(blocked.status, 403);
+  assert.equal(blocked.code, 'agreement_member');
+
+  const m = await c.get('/api/agreements/member');
+  assert.equal(m.firstTime, true);
+  assert.equal(m.cards.length, AGREEMENTS.member.cards.length);
+  const withCheck = m.cards.find((x) => x.check);
+  const wrong = (withCheck.check.answer + 1) % withCheck.check.options.length;
+  assert.equal((await c.post(`/api/agreements/member/${withCheck.id}`, { version: withCheck.version, initials: 'NA', checkAnswer: wrong })).status, 400);
+  assert.equal((await c.post(`/api/agreements/member/${m.cards[0].id}`, { version: m.cards[0].version, initials: 'x' })).status, 400);
+  assert.equal((await c.post(`/api/agreements/member/${m.cards[0].id}`, { version: 99, initials: 'NA' })).status, 409);
+
+  await agreeAll(c, 'member');
+  const me = (await c.get('/api/me')).user;
+  assert.deepEqual(me.agreements, { member: true, host: false });
+  assert.equal((await c.put('/api/me', { firstName: 'Nia', birthDate: '1990-01-01', gender: 'F', intents: ['friends'] })).status, 200);
+
+  // Hosting needs the host agreement.
+  const form = new FormData();
+  form.append('photo', new Blob([PNG], { type: 'image/png' }), 'me.png');
+  await c.upload('/api/me/photo', form);
+  const noHost = await c.post('/api/activities', newActivity());
+  assert.equal(noHost.code, 'agreement_host');
+  await agreeAll(c, 'host');
+  assert.equal((await c.post('/api/activities', newActivity())).status, 201);
+
+  // The record is permanent and stores initials, version and device.
+  const row = await one(`select a.* from agreement_acceptances a join users u on u.id = a.user_id
+                          where u.email = 'newbie@test.dev' and a.card_id = $1`, [withCheck.id]);
+  assert.equal(row.initials, 'TT');
+  assert.equal(row.check_passed, true);
+  await assert.rejects(q('update agreement_acceptances set initials = $1 where id = $2', ['ZZ', row.id]), /cannot be changed/);
+
+  // Changing one card asks for that card again, and only that card.
+  const card = AGREEMENTS.member.cards[2];
+  card.version += 1;
+  try {
+    assert.equal((await c.get('/api/me')).user.agreements.member, false);
+    const again = await c.get('/api/agreements/member');
+    assert.deepEqual(again.cards.filter((x) => x.pending).map((x) => x.id), [card.id]);
+    assert.equal(again.cards.find((x) => x.id === card.id).updated, true);
+    assert.equal((await c.get('/api/activities?view=discover')).status, 403);
+    await agreeAll(c, 'member');
+    assert.equal((await c.get('/api/me')).user.agreements.member, true);
+  } finally { card.version -= 1; }
 });
